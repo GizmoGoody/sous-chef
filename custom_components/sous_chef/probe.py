@@ -6,6 +6,10 @@ switch) until it is turned off. Its start is the lowest internal temperature
 since it was turned on: once the probe is in the food, that is the food's own
 temperature, so a warm reading in the air before it went in does not count.
 
+A probe can turn itself on when it starts reporting (off its charger) and, if
+it did, off again when it stops (back on its charger). A probe the user turned
+on stays on until the user turns it off.
+
 An ambient sensor reads the air in a grill, pit or oven. It has no cook, only
 an alarm.
 
@@ -31,6 +35,7 @@ from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .const import (
+    CONF_AUTO_OFF,
     CONF_AUTO_ON,
     CONF_CHANNELS,
     CONF_COLORS,
@@ -45,7 +50,7 @@ from .const import (
     STALL_RATE_F,
 )
 from .presets import CUSTOM, OTHER, Catalog, Level, SafeMinimum
-from .profiles import freshness
+from .profiles import CHARGER_TIMEOUT, freshness
 
 SAMPLE_INTERVAL = timedelta(seconds=60)
 
@@ -236,10 +241,13 @@ class Probe(Followed):
         self.channels: list[str] = list(data.get(CONF_CHANNELS) or [])
         self.colors: list[str] = list(data.get(CONF_COLORS) or [])
         self.auto_on: bool = bool(data.get(CONF_AUTO_ON))
+        self.auto_off: bool = bool(data.get(CONF_AUTO_OFF))
         self.catalog = catalog
         self.keep_last = keep_last
         saved = store.data.get(subentry_id, {})
         self.active: bool = saved.get("active", False)
+        # The probe turned itself on, so it may turn itself off; a probe the user turned on stays on
+        self.auto_started: bool = saved.get("auto_started", False)
         self.source: str = saved.get("source", catalog.default_source)
         if self.source not in catalog.sources:
             self.source = catalog.default_source
@@ -255,6 +263,8 @@ class Probe(Followed):
         self.limits = Limits(saved)
         self._samples: deque[tuple[float, float]] = deque()
         self._last_reading: float | None = None
+        # When the probe last had a reading, for telling that it is back on its charger
+        self._last_reported = dt_util.utcnow()
 
     @property
     def followed(self) -> list[str]:
@@ -267,6 +277,7 @@ class Probe(Followed):
         super().async_start()
         self._unsubscribes.append(async_track_time_interval(self.hass, self._tick, SAMPLE_INTERVAL))
         self._last_reading = self.reading
+        self._last_reported = dt_util.utcnow()
         self._update()
 
     @callback
@@ -283,8 +294,10 @@ class Probe(Followed):
             and reading is not None
         )
         self._last_reading = reading
+        if reading is not None:
+            self._last_reported = dt_util.utcnow()
         if turned_on:
-            self.set_active(True)
+            self.set_active(True, automatic=True)
             return
         self._update()
         self._changed()
@@ -294,6 +307,13 @@ class Probe(Followed):
         # A reading that does not change sends no state change; sampling it
         # anyway lets the rate fall to zero, which shows a stall
         self._sample()
+        now = dt_util.utcnow()
+        if self.reading is not None:
+            self._last_reported = now
+        elif self.auto_off and self.auto_started and self.active and now - self._last_reported >= CHARGER_TIMEOUT:
+            # It turned itself on off its charger, and has stopped reporting: it is back on its charger
+            self.set_active(False)
+            return
         self._changed()
 
     def _update(self) -> None:
@@ -440,11 +460,12 @@ class Probe(Followed):
     # -- Changing the cook ------------------------------------------------
 
     @callback
-    def set_active(self, active: bool) -> None:
+    def set_active(self, active: bool, automatic: bool = False) -> None:
         """Turning a probe on starts a new cook; turning it off ends it."""
         if active == self.active:
             return
         self.active = active
+        self.auto_started = active and automatic
         if active:
             self.start = None
             self.limits.armed = False
@@ -519,6 +540,7 @@ class Probe(Followed):
     def _save(self) -> None:
         self.store.save(self.id, {
             "active": self.active,
+            "auto_started": self.auto_started,
             "source": self.source,
             "food": self.food,
             "doneness": self.doneness,

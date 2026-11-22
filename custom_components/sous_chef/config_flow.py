@@ -34,6 +34,7 @@ from homeassistant.helpers.selector import (
 
 from .const import (
     COLORS,
+    CONF_AUTO_OFF,
     CONF_AUTO_ON,
     CONF_CHANNELS,
     CONF_COLORS,
@@ -139,6 +140,7 @@ def _sensors_schema(sensors: list[str], with_auto_on: bool) -> vol.Schema:
     }
     if with_auto_on:
         fields[vol.Required(CONF_AUTO_ON, default=False)] = BooleanSelector()
+        fields[vol.Required(CONF_AUTO_OFF, default=False)] = BooleanSelector()
     return vol.Schema(fields)
 
 
@@ -171,9 +173,9 @@ class ProbeSubentryFlow(ConfigSubentryFlow):
             if device in _taken(self, SUBENTRY_PROBE, CONF_DEVICE):
                 errors[CONF_DEVICE] = "already_added"
             elif layout := known_layout(self.hass, device):
-                return self._create(device, colors, layout.internal, layout.channels, auto_on=True)
+                return self._create(device, colors, layout.internal, layout.channels, auto_on=True, auto_off=True)
             elif len(sensors) == 1:
-                return self._create(device, colors, sensors[0], [], auto_on=False)
+                return self._create(device, colors, sensors[0], [], auto_on=False, auto_off=False)
             elif not sensors:
                 errors[CONF_DEVICE] = "no_temperature"
             else:
@@ -196,7 +198,14 @@ class ProbeSubentryFlow(ConfigSubentryFlow):
         if user_input is not None:
             internal, channels, errors = _sensors(user_input)
             if not errors:
-                return self._create(self._device, self._colors, internal, channels, auto_on=user_input[CONF_AUTO_ON])
+                return self._create(
+                    self._device,
+                    self._colors,
+                    internal,
+                    channels,
+                    auto_on=user_input[CONF_AUTO_ON],
+                    auto_off=user_input[CONF_AUTO_OFF],
+                )
         schema = _sensors_schema(sensors, with_auto_on=True)
         return self.async_show_form(
             step_id="sensors",
@@ -206,7 +215,13 @@ class ProbeSubentryFlow(ConfigSubentryFlow):
         )
 
     def _create(
-        self, device: str, colors: list[str], internal: str | None, channels: list[str], auto_on: bool
+        self,
+        device: str,
+        colors: list[str],
+        internal: str | None,
+        channels: list[str],
+        auto_on: bool,
+        auto_off: bool,
     ) -> SubentryFlowResult:
         return self.async_create_entry(
             title=_device_name(self.hass, device),
@@ -216,6 +231,7 @@ class ProbeSubentryFlow(ConfigSubentryFlow):
                 CONF_CHANNELS: channels,
                 CONF_COLORS: colors,
                 CONF_AUTO_ON: auto_on,
+                CONF_AUTO_OFF: auto_off,
             },
         )
 
@@ -230,6 +246,7 @@ class ProbeSubentryFlow(ConfigSubentryFlow):
         if user_input is not None:
             data[CONF_COLORS] = list(user_input.get(CONF_COLORS) or [])
             data[CONF_AUTO_ON] = user_input[CONF_AUTO_ON]
+            data[CONF_AUTO_OFF] = user_input[CONF_AUTO_OFF]
             if choose_sensors:
                 data[CONF_INTERNAL], data[CONF_CHANNELS], errors = _sensors(user_input)
             if not errors:
@@ -237,6 +254,7 @@ class ProbeSubentryFlow(ConfigSubentryFlow):
         schema = vol.Schema({
             vol.Optional(CONF_COLORS, default=[]): COLOR_SELECTOR,
             vol.Required(CONF_AUTO_ON, default=False): BooleanSelector(),
+            vol.Required(CONF_AUTO_OFF, default=False): BooleanSelector(),
         })
         if choose_sensors:
             schema = schema.extend(_sensors_schema(sensors, with_auto_on=False).schema)
