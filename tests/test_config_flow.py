@@ -159,7 +159,13 @@ async def test_food_of_your_own(hass: HomeAssistant) -> None:
         "icon": "mdi:cow",
         "levels": [{"name": "Probe tender", "temperature": 203.0}, {"name": "Sliceable", "temperature": 195.0}],
         "unit": hass.config.units.temperature_unit,
+        "safety_food": None,
     }
+
+    result = await _add(hass, entry, "food", {"name": "Pork butt", "safety_food": "pork_shoulder"})
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    butt = next(s for s in entry.subentries.values() if s.title == "Pork butt")
+    assert butt.data["safety_food"] == "pork_shoulder"
 
     result = await _add(hass, entry, "food", {"name": "Brisket"})
     assert result["errors"] == {"name": "name_taken"}

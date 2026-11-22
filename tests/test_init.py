@@ -92,25 +92,68 @@ async def test_entities_on_the_probe_device(hass: HomeAssistant) -> None:
     assert _value(hass, "sensor.probe_max") == 103
 
 
-async def test_sources_for_the_country(hass: HomeAssistant) -> None:
+async def test_sources(hass: HomeAssistant) -> None:
     await _setup(hass)
     state = hass.states.get(SOURCE)
-    # The country's government chart comes first, and is a new probe's source; Mine is last
-    assert state.state == "foodsafety_gov"
-    assert state.attributes["options"][0] == "foodsafety_gov"
-    assert state.attributes["options"][1] == "thermoworks"
-    assert state.attributes["options"][-1] == "mine"
-    assert state.attributes["url"].startswith("https://www.foodsafety.gov/")
+    # Only chef charts are sources; the first is a new probe's source, and Mine is last
+    assert state.attributes["options"] == ["thermoworks", "americas_test_kitchen", "mine"]
+    assert state.state == "thermoworks"
+    assert state.attributes["url"].startswith("https://www.thermoworks.com/")
+
+
+async def test_safe_minimum_from_the_country(hass: HomeAssistant) -> None:
+    await _setup(hass)
     await _select(hass, FOOD, "beef")
-    assert hass.states.get(DONENESS).state == "safe_minimum"
-    assert _value(hass, TARGET) == 145
-    assert hass.states.get(DONENESS).attributes["rest_minutes"] == 3
+    food = hass.states.get(FOOD).attributes
+    assert food["safe_minimum"] == 145
+    assert food["safe_minimum_rest_minutes"] == 3
+    assert food["safety_chart"] == "FoodSafety.gov (Safe Minimum Internal Temperatures)"
+    assert food["safety_url"].startswith("https://www.foodsafety.gov/")
 
 
-async def test_sources_elsewhere(hass: HomeAssistant) -> None:
+async def test_safe_minimum_elsewhere(hass: HomeAssistant) -> None:
     await _setup(hass, country="NZ")
-    assert hass.states.get(SOURCE).state == "fsanz"
-    assert hass.states.get(FOOD).attributes["options"] == ["ground_meat", "poultry", "other"]
+    await _select(hass, FOOD, "chicken")
+    food = hass.states.get(FOOD).attributes
+    assert food["safe_minimum"] == 167
+    assert food["safety_chart"] == "FSANZ (Food Safety Basics)"
+    # A food the country's chart does not cover takes FoodSafety.gov's
+    await _select(hass, FOOD, "beef")
+    assert hass.states.get(FOOD).attributes["safety_chart"].startswith("FoodSafety.gov")
+    # The UK chart gives a hold time, not a rest
+    await _setup_again(hass, "GB")
+    await _select(hass, FOOD, "pork")
+    food = hass.states.get(FOOD).attributes
+    assert food["safe_minimum"] == 158
+    assert food["safe_minimum_hold_minutes"] == 2
+    assert "safe_minimum_rest_minutes" not in food
+
+
+async def _setup_again(hass: HomeAssistant, country: str) -> None:
+    hass.config.country = country
+    (entry,) = hass.config_entries.async_entries(DOMAIN)
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+
+
+async def test_below_safe_minimum(hass: HomeAssistant) -> None:
+    await _setup(hass, country="CA")
+    await _select(hass, FOOD, "beef")
+    # Rare is 120 °F; Health Canada's minimum for beef is 145 °F. The target stays.
+    doneness = hass.states.get(DONENESS).attributes
+    assert doneness["below_safe_minimum"] is True
+    assert doneness["safe_minimum"] == 145
+    assert _value(hass, TARGET) == 120
+    await _select(hass, DONENESS, "well_done")
+    assert hass.states.get(DONENESS).attributes["below_safe_minimum"] is False
+    # A custom target is checked too
+    await _set(hass, TARGET, 140)
+    assert hass.states.get(DONENESS).state == "custom"
+    assert hass.states.get(DONENESS).attributes["below_safe_minimum"] is True
+    # Other has no safe minimum
+    await _select(hass, FOOD, "other")
+    assert "below_safe_minimum" not in hass.states.get(DONENESS).attributes
+    assert "safe_minimum" not in hass.states.get(FOOD).attributes
 
 
 async def test_preset_sets_target(hass: HomeAssistant) -> None:
@@ -145,7 +188,6 @@ async def test_preset_in_celsius(hass: HomeAssistant) -> None:
     entry.add_to_hass(hass)
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
-    # With no country, the brand chart comes first
     assert hass.states.get(SOURCE).state == "thermoworks"
     await _select(hass, FOOD, "beef")
     # The chart's own °C value, not a conversion
@@ -168,18 +210,25 @@ async def test_custom_target(hass: HomeAssistant) -> None:
 
 async def test_switching_source_keeps_the_food(hass: HomeAssistant) -> None:
     await _setup(hass)
+    await _select(hass, FOOD, "chicken")
+    await _select(hass, DONENESS, "dark_meat")
+    await _select(hass, SOURCE, "americas_test_kitchen")
+    assert hass.states.get(FOOD).state == "chicken"
+    assert hass.states.get(DONENESS).state == "dark_meat"
+    assert _value(hass, TARGET) == 175
+    # A doneness the new source lacks: its first
+    await _select(hass, SOURCE, "thermoworks")
+    await _select(hass, DONENESS, "breast")
+    await _select(hass, SOURCE, "americas_test_kitchen")
+    assert hass.states.get(DONENESS).state == "white_meat"
+    assert _value(hass, TARGET) == 160
+    # A source without the food: Other, and the target stays
     await _select(hass, SOURCE, "thermoworks")
     await _select(hass, FOOD, "beef")
-    await _select(hass, DONENESS, "medium_rare")
-    await _select(hass, SOURCE, "health_canada")
-    assert hass.states.get(FOOD).state == "beef"
-    assert hass.states.get(DONENESS).state == "medium_rare"
-    assert _value(hass, TARGET) == 145
-    # A source without the food: Other, and the target stays
-    await _select(hass, SOURCE, "fsanz")
+    await _select(hass, SOURCE, "americas_test_kitchen")
     assert hass.states.get(FOOD).state == "other"
     assert hass.states.get(DONENESS).state == "custom"
-    assert _value(hass, TARGET) == 145
+    assert _value(hass, TARGET) == 120
 
 
 async def test_foods_of_your_own(hass: HomeAssistant) -> None:
@@ -189,6 +238,7 @@ async def test_foods_of_your_own(hass: HomeAssistant) -> None:
             "icon": "mdi:cow",
             "levels": [{"name": "Probe tender", "temperature": 95}],
             "unit": "°C",
+            "safety_food": "brisket",
         },
         subentry_type="food",
         title="Brisket",
@@ -202,13 +252,16 @@ async def test_foods_of_your_own(hass: HomeAssistant) -> None:
     assert hass.states.get(DONENESS).state == "Probe tender"
     assert _value(hass, TARGET) == 203
     assert hass.states.get(SOURCE).attributes["url"] is None
+    # Its safe minimum is the food it was set to take it from
+    assert hass.states.get(FOOD).attributes["safe_minimum"] == 145
+    assert hass.states.get(DONENESS).attributes["below_safe_minimum"] is False
 
 
 async def test_start_is_the_lowest_reading(hass: HomeAssistant) -> None:
     _, channels = await _setup(hass, "84")
     reading = channels[0]
     # The cook can be set up before the probe is turned on
-    await _select(hass, FOOD, "poultry")
+    await _select(hass, FOOD, "chicken")
     assert hass.states.get("sensor.probe_progress").state == "unknown"
     assert hass.states.get("binary_sensor.probe_done").state == "unavailable"
     await _switch(hass, True)
@@ -325,13 +378,13 @@ async def test_signal_drop_keeps_the_cook(hass: HomeAssistant) -> None:
     _, channels = await _setup(hass, "39")
     reading = channels[0]
     await _switch(hass, True)
-    await _select(hass, FOOD, "poultry")
+    await _select(hass, FOOD, "chicken")
     await _read(hass, reading, "80")
     await _read(hass, reading, "unavailable")
     await _read(hass, reading, "82")
     assert hass.states.get(ACTIVE).state == "on"
     assert hass.states.get("sensor.probe_progress").attributes["start"] == 39
-    assert hass.states.get(FOOD).state == "poultry"
+    assert hass.states.get(FOOD).state == "chicken"
 
 
 async def test_new_cook_keeps_the_last_settings(hass: HomeAssistant) -> None:
@@ -349,11 +402,11 @@ async def test_new_cook_keeps_the_last_settings(hass: HomeAssistant) -> None:
 async def test_new_cook_starts_blank(hass: HomeAssistant) -> None:
     await _setup(hass, keep_last=False)
     await _switch(hass, True)
-    await _select(hass, SOURCE, "thermoworks")
-    await _select(hass, FOOD, "beef")
+    await _select(hass, SOURCE, "americas_test_kitchen")
+    await _select(hass, FOOD, "chicken")
     await _switch(hass, False)
     await _switch(hass, True)
-    assert hass.states.get(SOURCE).state == "foodsafety_gov"
+    assert hass.states.get(SOURCE).state == "thermoworks"
     assert hass.states.get(FOOD).state == "other"
     assert hass.states.get(TARGET).state == "unknown"
 
@@ -362,11 +415,11 @@ async def test_cook_survives_reload(hass: HomeAssistant) -> None:
     entry, _ = await _setup(hass)
     await _switch(hass, True)
     await _select(hass, SOURCE, "thermoworks")
-    await _select(hass, FOOD, "fish")
+    await _select(hass, FOOD, "tuna")
     await _set(hass, "number.probe_alarm_high", 150)
     assert await hass.config_entries.async_reload(entry.entry_id)
     await hass.async_block_till_done()
     assert hass.states.get(ACTIVE).state == "on"
-    assert hass.states.get(FOOD).state == "fish"
-    assert hass.states.get(DONENESS).state == "tuna_swordfish_marlin"
+    assert hass.states.get(FOOD).state == "tuna"
+    assert hass.states.get(DONENESS).state == "done"
     assert _value(hass, "number.probe_alarm_high") == 150

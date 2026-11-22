@@ -108,16 +108,18 @@
       "step": {
         "user": {
           "title": "Add a food",
-          "description": "A food no chart lists, with your own doneness levels. Choose it with the source Mine.",
+          "description": "A food no chef chart lists, with your own doneness levels. Choose it with the source Mine.",
           "data": {
             "name": "Name",
             "icon": "Icon",
-            "levels": "Doneness levels"
+            "levels": "Doneness levels",
+            "safety_food": "Safe minimum as"
           },
           "data_description": {
             "name": "What is cooking, such as Brisket.",
             "icon": "Shown for this food. Optional.",
-            "levels": "Each level has a name, such as Probe tender, and its temperature in {unit}. Choosing one sets the target."
+            "levels": "Each level has a name, such as Probe tender, and its temperature in {unit}. Choosing one sets the target.",
+            "safety_food": "The food whose government safe minimum applies to this one, such as Pork shoulder for a pork butt. Optional. Sous Chef flags a target below it."
           }
         },
         "reconfigure": {
@@ -125,12 +127,14 @@
           "data": {
             "name": "Name",
             "icon": "Icon",
-            "levels": "Doneness levels"
+            "levels": "Doneness levels",
+            "safety_food": "Safe minimum as"
           },
           "data_description": {
             "name": "What is cooking, such as Brisket.",
             "icon": "Shown for this food. Optional.",
-            "levels": "Each level has a name, such as Probe tender, and its temperature in {unit}. Choosing one sets the target."
+            "levels": "Each level has a name, such as Probe tender, and its temperature in {unit}. Choosing one sets the target.",
+            "safety_food": "The food whose government safe minimum applies to this one, such as Pork shoulder for a pork butt. Optional. Sous Chef flags a target below it."
           }
         }
       },
@@ -173,27 +177,36 @@
       "source": {
         "name": "Source",
         "state": {
-          "foodsafety_gov": "FoodSafety.gov (Safe Minimum Internal Temperatures)",
-          "health_canada": "Health Canada (Safe Cooking Temperatures)",
-          "uk_fsa": "UK Food Standards Agency (Cooking Your Food)",
-          "fsanz": "FSANZ (Food Safety Basics)",
-          "thermoworks": "ThermoWorks (Chef-Recommended Temps)",
+          "thermoworks": "ThermoWorks (Chef-Recommended Temperatures)",
+          "americas_test_kitchen": "America's Test Kitchen (How to Know When Food Is Done)",
           "mine": "Mine"
         }
       },
       "food_type": {
         "name": "Food type",
         "state": {
-          "beef": "Beef, veal and lamb",
-          "ground_meat": "Ground meat",
+          "beef": "Beef",
+          "veal": "Veal",
+          "lamb": "Lamb",
           "pork": "Pork",
-          "ham": "Ham",
-          "bbq": "Brisket, ribs and pork butt",
-          "poultry": "Poultry",
-          "game": "Game meat",
-          "fish": "Fish",
+          "fresh_ham": "Fresh ham",
+          "precooked_ham": "Precooked ham",
+          "brisket": "Brisket",
+          "pork_shoulder": "Pork shoulder",
+          "pork_ribs": "Pork ribs",
+          "chicken": "Chicken",
+          "turkey": "Turkey",
+          "tuna": "Tuna",
+          "swordfish": "Swordfish",
+          "marlin": "Marlin",
+          "salmon": "Salmon",
+          "white_fish": "White fish",
+          "ground_beef": "Ground beef",
+          "ground_pork": "Ground pork",
+          "ground_lamb": "Ground lamb",
+          "ground_poultry": "Ground poultry",
           "shellfish": "Shellfish",
-          "eggs": "Egg dishes",
+          "egg_dishes": "Egg dishes",
           "leftovers": "Leftovers and casseroles",
           "other": "Other"
         }
@@ -206,17 +219,11 @@
           "medium": "Medium",
           "medium_well": "Medium well",
           "well_done": "Well done",
-          "safe_minimum": "Safe minimum",
-          "cooked_through": "Cooked through",
           "usda_done": "USDA done",
           "done": "Done",
-          "raw": "Raw",
-          "precooked": "Precooked",
-          "pieces": "Pieces",
-          "whole": "Whole",
+          "breast": "Breast",
+          "white_meat": "White meat",
           "dark_meat": "Dark meat",
-          "tuna_swordfish_marlin": "Tuna, swordfish or marlin",
-          "other_fish": "Other fish",
           "custom": "Custom"
         }
       }
@@ -274,6 +281,33 @@
         "temperature": {
           "name": "Temperature"
         }
+      }
+    },
+    "safety_food": {
+      "options": {
+        "beef": "Beef",
+        "veal": "Veal",
+        "lamb": "Lamb",
+        "pork": "Pork",
+        "fresh_ham": "Fresh ham",
+        "precooked_ham": "Precooked ham",
+        "brisket": "Brisket",
+        "pork_shoulder": "Pork shoulder",
+        "pork_ribs": "Pork ribs",
+        "chicken": "Chicken",
+        "turkey": "Turkey",
+        "tuna": "Tuna",
+        "swordfish": "Swordfish",
+        "marlin": "Marlin",
+        "salmon": "Salmon",
+        "white_fish": "White fish",
+        "ground_beef": "Ground beef",
+        "ground_pork": "Ground pork",
+        "ground_lamb": "Ground lamb",
+        "ground_poultry": "Ground poultry",
+        "shellfish": "Shellfish",
+        "egg_dishes": "Egg dishes",
+        "leftovers": "Leftovers and casseroles"
       }
     }
   },

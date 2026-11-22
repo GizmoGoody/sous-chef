@@ -1,7 +1,9 @@
 """A probe's source, food type and doneness.
 
 Each carries the source's chart link as its url attribute, so the Sous Chef
-Card can show where a target comes from.
+Card can show where a target comes from. Food type also carries the food's
+government safe minimum and its chart; Doneness says whether the target is
+below it.
 """
 
 from __future__ import annotations
@@ -37,7 +39,7 @@ class PresetSelect(ProbeEntity, SelectEntity):
     """A setting of the cook's preset."""
 
     _attr_entity_category = EntityCategory.CONFIG
-    _unrecorded_attributes = frozenset({"url"})
+    _unrecorded_attributes = frozenset({"url", "safety_chart", "safety_url"})
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -45,7 +47,7 @@ class PresetSelect(ProbeEntity, SelectEntity):
 
 
 class SourceSelect(PresetSelect):
-    """The chart the presets come from: government charts for Home Assistant's country first."""
+    """The chef chart the presets come from, or the user's own foods."""
 
     @property
     def options(self) -> list[str]:
@@ -69,6 +71,19 @@ class FoodTypeSelect(PresetSelect):
     @property
     def current_option(self) -> str:
         return self.probe.food
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        attributes = super().extra_state_attributes
+        if minimum := self.probe.safe_minimum:
+            attributes["safe_minimum"] = minimum.level.in_unit(self.probe.unit)
+            if minimum.level.rest_minutes:
+                attributes["safe_minimum_rest_minutes"] = minimum.level.rest_minutes
+            if minimum.level.hold_minutes:
+                attributes["safe_minimum_hold_minutes"] = minimum.level.hold_minutes
+            attributes["safety_chart"] = minimum.chart.name
+            attributes["safety_url"] = minimum.chart.url
+        return attributes
 
     @property
     def icon(self) -> str | None:
@@ -100,6 +115,10 @@ class DonenessSelect(PresetSelect):
             attributes["rest_minutes"] = level.rest_minutes
         if level and level.hold_minutes:
             attributes["hold_minutes"] = level.hold_minutes
+        # Flagged for the card to warn; the target itself is never changed
+        if (below := self.probe.below_safe_minimum) is not None:
+            attributes["below_safe_minimum"] = below
+            attributes["safe_minimum"] = self.probe.safe_minimum.level.in_unit(self.probe.unit)  # type: ignore[union-attr]
         return attributes
 
     async def async_select_option(self, option: str) -> None:

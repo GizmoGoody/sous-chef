@@ -44,7 +44,7 @@ from .const import (
     RATE_MIN_SPAN_S,
     STALL_RATE_F,
 )
-from .presets import CUSTOM, OTHER, Catalog, Level
+from .presets import CUSTOM, OTHER, Catalog, Level, SafeMinimum
 from .profiles import freshness
 
 SAMPLE_INTERVAL = timedelta(seconds=60)
@@ -423,6 +423,19 @@ class Probe(Followed):
     def level(self) -> Level | None:
         """The chosen doneness level, or None for Custom."""
         return self.catalog.levels(self.source, self.food).get(self.doneness)
+
+    @property
+    def safe_minimum(self) -> SafeMinimum | None:
+        """The government safe minimum for the food, or None for a food with none."""
+        return self.catalog.safe_minimum(self.source, self.food)
+
+    @property
+    def below_safe_minimum(self) -> bool | None:
+        """Whether the target, of a named doneness or Custom, is below the food's safe minimum. None without both."""
+        minimum = self.safe_minimum
+        if minimum is None or self.target is None:
+            return None
+        return self.target < minimum.level.in_unit(self.unit)
 
     # -- Changing the cook ------------------------------------------------
 

@@ -28,6 +28,7 @@ CONF_ICON = "icon"
 CONF_LEVELS = "levels"
 CONF_TEMPERATURE = "temperature"
 CONF_UNIT = "unit"
+CONF_SAFETY_FOOD = "safety_food"
 
 # Home Assistant's named colors, for a probe's colored bands
 COLORS = [
