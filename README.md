@@ -85,6 +85,7 @@ Sous Chef picks the government chart from your Home Assistant country. A food th
 
 ### For the Sous Chef Card
 
+- The **Done at** sensor's `projection` attribute: the readings Sous Chef expects from now to the target, as `time` (ISO 8601) and `temperature` points. Sous Chef's rate model is a constant rate, so the points are now, Done at and, with Pull early by set, the target. It is empty while Done at has no value.
 - The **Progress** sensor's attributes: `internal` (entity ID, or empty for the lowest of the channels), `channels` (entity IDs, from the tip), `colors` (Home Assistant color names, in order) and `start`.
 - **Source**, **Food type** and **Doneness** carry the chef chart's link as `url`. Doneness also carries `rest_minutes` or `hold_minutes` when the chart gives one.
 - **Food type** carries the food's government safe minimum: `safe_minimum` (in the probe's unit), `safe_minimum_rest_minutes` or `safe_minimum_hold_minutes` when the chart gives one, and `safety_chart` and `safety_url`, the chart's name and link.

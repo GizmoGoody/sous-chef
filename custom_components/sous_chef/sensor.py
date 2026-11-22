@@ -74,13 +74,28 @@ class RateSensor(ProbeEntity, SensorEntity):
 
 
 class DoneAtSensor(ProbeEntity, SensorEntity):
-    """When the internal temperature will reach the target, less Pull early by, at its current rate."""
+    """When the internal temperature will reach the target, less Pull early by, at its current rate.
+
+    Its projection attribute gives the readings Sous Chef expects on the way,
+    so the Sous Chef Card draws them as they are worked out here.
+    """
 
     _attr_device_class = SensorDeviceClass.TIMESTAMP
+    # It changes with every reading, so the recorder leaves it out
+    _unrecorded_attributes = frozenset({"projection"})
 
     @property
     def native_value(self) -> datetime | None:
         return self.probe.done_at
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {
+            "projection": [
+                {"time": time.isoformat(), "temperature": round(temperature, 1)}
+                for time, temperature in self.probe.projection
+            ]
+        }
 
 
 class MaxSensor(ProbeEntity, SensorEntity):
