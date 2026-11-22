@@ -54,6 +54,7 @@ async def test_known_probe_needs_only_the_device(hass: HomeAssistant) -> None:
         "channels": channels[1:],
         "colors": ["red", "black"],
         "auto_on": True,
+        "auto_off": True,
     }
 
     # The same probe cannot be added twice
@@ -68,7 +69,7 @@ async def test_probe_with_one_sensor(hass: HomeAssistant) -> None:
     result = await _add(hass, entry, "probe", {"device": device})
     assert result["type"] is FlowResultType.CREATE_ENTRY
     (subentry,) = entry.subentries.values()
-    assert subentry.data == {"device": device, "internal": sensor, "channels": [], "colors": [], "auto_on": False}
+    assert subentry.data == {"device": device, "internal": sensor, "channels": [], "colors": [], "auto_on": False, "auto_off": False}
 
 
 async def test_probe_with_several_sensors(hass: HomeAssistant) -> None:
@@ -78,7 +79,7 @@ async def test_probe_with_several_sensors(hass: HomeAssistant) -> None:
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "sensors"
     result = await hass.config_entries.subentries.async_configure(
-        result["flow_id"], {"internal": sensors[1], "channels": [sensors[2], sensors[1], sensors[0]], "auto_on": True}
+        result["flow_id"], {"internal": sensors[1], "channels": [sensors[2], sensors[1], sensors[0]], "auto_on": True, "auto_off": True}
     )
     assert result["type"] is FlowResultType.CREATE_ENTRY
     (subentry,) = entry.subentries.values()
@@ -89,6 +90,7 @@ async def test_probe_with_several_sensors(hass: HomeAssistant) -> None:
         "channels": [sensors[2], sensors[0]],
         "colors": ["blue"],
         "auto_on": True,
+        "auto_off": True,
     }
 
 

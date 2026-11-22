@@ -20,6 +20,7 @@ CONF_INTERNAL = "internal"
 CONF_CHANNELS = "channels"
 CONF_COLORS = "colors"
 CONF_AUTO_ON = "auto_on"
+CONF_AUTO_OFF = "auto_off"
 CONF_SENSOR = "sensor"
 
 # A food's data

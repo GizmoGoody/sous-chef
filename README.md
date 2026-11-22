@@ -31,9 +31,10 @@ The [Sous Chef Card](https://github.com/GizmoGoody/sous-chef-card) shows it on a
 
 - A cook runs while the probe's **Active** switch is on. Turn it on whenever you like, even with the probe still on its charger, and set up the cook.
 - A probe set to **turn on when it starts reporting** turns itself on, for example when an RFX probe comes off its charger. This is on by default for known probes such as the RFX MEAT.
+- A probe set to **turn off when put back on the charger** turns itself off once it has had no reading for 5 minutes, but only when it turned itself on. A probe you turned on yourself stays on. This is on by default for known probes added from now on; for a probe added earlier, turn it on in the probe's **Reconfigure**.
 - The **internal temperature** is the one temperature that stands for the inside of the food. Progress, Rate, Done at, Done, Stalled and the probe's alarm all use it.
 - The cook's start is the lowest internal temperature since the probe was turned on. Once the probe is in the food, that is the food's own temperature. Progress runs from that start to the target.
-- A lost signal or a restart changes nothing. Turning the probe off ends the cook.
+- A lost signal or a restart changes nothing, except that a probe that turned itself on turns itself off after 5 minutes without a reading when **turn off when put back on the charger** is set. Turning the probe off ends the cook.
 - An RFX probe counts as reporting only while it sends new data. ThermoWorks Cloud keeps showing a probe's last value while it is on its charger, and that old value is treated as no reading.
 
 ## Entities

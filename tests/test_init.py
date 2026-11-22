@@ -1,12 +1,14 @@
 """One probe and one ambient sensor: the cook follows the Active switch, the presets and the internal temperature."""
 
 from collections import deque
+from datetime import timedelta
 
+from freezegun.api import FrozenDateTimeFactory
 from homeassistant.config_entries import ConfigSubentryData
 from homeassistant.core import HomeAssistant
 from homeassistant.util import dt as dt_util
 from homeassistant.util.unit_system import METRIC_SYSTEM, US_CUSTOMARY_SYSTEM
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_time_changed
 
 from custom_components.sous_chef.const import DOMAIN
 
@@ -26,6 +28,7 @@ async def _setup(
     minutes_ago: float = 0,
     country: str | None = "US",
     extra: list[ConfigSubentryData] | None = None,
+    auto_off: bool = True,
 ) -> tuple[MockConfigEntry, list[str]]:
     hass.config.units = US_CUSTOMARY_SYSTEM
     hass.config.country = country
@@ -44,6 +47,7 @@ async def _setup(
                     "channels": channels[1:],
                     "colors": ["red", "blue"],
                     "auto_on": True,
+                    "auto_off": auto_off,
                 },
                 subentry_type="probe",
                 title="Probe",
@@ -371,6 +375,44 @@ async def test_charger_value_is_no_reading(hass: HomeAssistant) -> None:
 async def test_off_the_charger_turns_it_on(hass: HomeAssistant) -> None:
     _, channels = await _setup(hass, "70", minutes_ago=3000)
     await _read(hass, channels[0], "71")
+    assert hass.states.get(ACTIVE).state == "on"
+
+
+async def _minutes_pass(hass: HomeAssistant, freezer: FrozenDateTimeFactory, minutes: int) -> None:
+    """Let time pass a minute at a time, so each sample runs."""
+    for _ in range(minutes):
+        freezer.tick(timedelta(minutes=1))
+        async_fire_time_changed(hass)
+        await hass.async_block_till_done()
+
+
+async def test_back_on_the_charger_turns_it_off(hass: HomeAssistant, freezer: FrozenDateTimeFactory) -> None:
+    _, channels = await _setup(hass, "70", minutes_ago=3000)
+    # Off its charger, it turns itself on
+    await _read(hass, channels[0], "71")
+    assert hass.states.get(ACTIVE).state == "on"
+    # Back on its charger, it sends nothing new. ThermoWorks Cloud keeps its
+    # last value, which counts as no reading after 5 minutes.
+    await _minutes_pass(hass, freezer, 6)
+    assert hass.states.get(ACTIVE).state == "on"
+    # No reading for the charger timeout: it turns itself off
+    await _minutes_pass(hass, freezer, 5)
+    assert hass.states.get(ACTIVE).state == "off"
+
+
+async def test_turned_on_by_hand_stays_on(hass: HomeAssistant, freezer: FrozenDateTimeFactory) -> None:
+    _, channels = await _setup(hass, "70", minutes_ago=3000)
+    await _switch(hass, True)
+    await _read(hass, channels[0], "71")
+    await _minutes_pass(hass, freezer, 15)
+    assert hass.states.get(ACTIVE).state == "on"
+
+
+async def test_charger_option_off_stays_on(hass: HomeAssistant, freezer: FrozenDateTimeFactory) -> None:
+    _, channels = await _setup(hass, "70", minutes_ago=3000, auto_off=False)
+    await _read(hass, channels[0], "71")
+    assert hass.states.get(ACTIVE).state == "on"
+    await _minutes_pass(hass, freezer, 15)
     assert hass.states.get(ACTIVE).state == "on"
 
 
