@@ -421,6 +421,21 @@ class Probe(Followed):
         return dt_util.utcnow() + timedelta(minutes=(self.done_temperature - reading) / rate)  # type: ignore[operator]
 
     @property
+    def projection(self) -> list[tuple[datetime, float]]:
+        """The readings the rate model expects, from now to the target: empty without a Done at.
+
+        The model is a constant rate, so the points are now, Done at (the
+        target less Pull early) and, with Pull early set, the target itself.
+        """
+        rate, reading, done_at = self.rate, self.reading, self.done_at
+        if done_at is None or rate is None or reading is None:
+            return []
+        points = [(dt_util.utcnow(), reading), (done_at, self.done_temperature)]
+        if self.pull_early and self.target is not None:
+            points.append((dt_util.utcnow() + timedelta(minutes=(self.target - reading) / rate), self.target))
+        return points  # type: ignore[return-value]
+
+    @property
     def progress(self) -> float | None:
         reading, start, target = self.reading, self.start, self.target
         if not self.active or reading is None or start is None or target is None or target <= start:

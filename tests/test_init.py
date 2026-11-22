@@ -350,6 +350,25 @@ async def test_rate_window(hass: HomeAssistant) -> None:
     assert probe.rate is None
 
 
+async def test_projection(hass: HomeAssistant) -> None:
+    entry, _ = await _setup(hass)
+    (probe,) = entry.runtime_data.probes.values()
+    assert hass.states.get("sensor.probe_done_at").attributes["projection"] == []
+    await _switch(hass, True)
+    await _set(hass, TARGET, 160)
+    await _set(hass, "number.probe_pull_early_by", 5)
+    now = dt_util.utcnow().timestamp()
+    # 2 °F a minute from 100 °F: done (155 °F) in 27.5 minutes, the target in 30
+    probe._samples = deque((now - 60 * m, 100 - 2 * m) for m in range(10, -1, -1))
+    probe._changed()
+    await hass.async_block_till_done()
+    points = hass.states.get("sensor.probe_done_at").attributes["projection"]
+    assert [p["temperature"] for p in points] == [100, 155, 160]
+    times = [dt_util.parse_datetime(p["time"]).timestamp() for p in points]
+    assert round((times[1] - times[0]) / 60, 1) == 27.5
+    assert round((times[2] - times[0]) / 60, 1) == 30
+
+
 async def test_turns_on_when_it_starts_reporting(hass: HomeAssistant) -> None:
     _, channels = await _setup(hass, "unavailable")
     assert hass.states.get(ACTIVE).state == "off"
