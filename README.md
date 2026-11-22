@@ -2,7 +2,7 @@
 
 *For the grill, the smoker and the kitchen.*
 
-Sous Chef turns any food thermometer in Home Assistant into a cook. You say what you are cooking and how done you want it, from a chart you trust. It tells you how far along the food is, how fast it is heating, when it will be done, whether it has stalled, and when anything is out of range.
+Sous Chef turns any food thermometer in Home Assistant into a cook. You say what you are cooking and how done you want it, from a chef's chart you trust, and it tells you when that is below your government's safe minimum. It tells you how far along the food is, how fast it is heating, when it will be done, whether it has stalled, and when anything is out of range.
 
 Every cook is kept as entities, so every browser shows the same cook at once, a change made in one shows in all, and automations can use it. It needs no helpers and no automations.
 
@@ -24,7 +24,7 @@ The [Sous Chef Card](https://github.com/GizmoGoody/sous-chef-card) shows it on a
    - A device with **one** temperature sensor needs nothing else.
    - A device with **several** temperature sensors asks for its internal temperature (one sensor, or empty for the lowest of the channels) and its channels in order from the tip.
 3. Choose **Add ambient sensor** for each sensor that reads the air in a grill, pit or oven. It gets alarms, no food and no target.
-4. Choose **Add food** for a food no chart lists, such as a brisket, with your own doneness levels. It is listed under the source **Mine**.
+4. Choose **Add food** for a food no chef chart lists, with your own doneness levels. It is listed under the source **Mine**. Optionally, choose **Safe minimum as**: the built-in food whose government safe minimum applies to it.
 5. **Configure** sets whether a new cook keeps the last source, food type, doneness and target (on by default).
 
 ## How a cook runs
@@ -43,9 +43,9 @@ On each probe's own device, beside its temperature sensors. Settings are Configu
 | Entity | Kind | What it is |
 | --- | --- | --- |
 | Active | Control | On while the probe is cooking. Turning it on starts a new cook. |
-| Source | Configuration | The chart the presets come from. |
-| Food type | Configuration | What is cooking: the source's foods, or Other for any target. |
-| Doneness | Configuration | The food's levels, or Custom for any other target. Choosing one sets the target. |
+| Source | Configuration | The chef chart the presets come from, or Mine. |
+| Food type | Configuration | What is cooking (one food per probe): the source's foods, or Other for any target. |
+| Doneness | Configuration | The food's named levels, or Custom for any other target. Choosing one sets the target. |
 | Target | Configuration | The temperature to reach. |
 | Pull early by | Configuration | Done turns on this many degrees before the target, for carryover while the food rests. |
 | Alarm high, Alarm low | Configuration | The internal temperature must stay below and above these while the probe is on. 0 is no limit. |
@@ -63,23 +63,33 @@ An Alarm low turns on only once the temperature has first reached it, so lightin
 
 ### Presets
 
-Every preset names its source: one published chart. Government charts give a safe minimum; brand charts give doneness for taste. Government charts for your Home Assistant country come first, and the first of them is a new probe's source. Each value is copied from its chart in the units it gives. Where a chart gives a range, the preset is the low end of the range.
+Every preset names its source: one published chef chart. Each value is copied from its chart in the units it gives. Where a chart gives a range, the preset is the low end of the range. A doneness is always a named level from its chart (Rare, Medium rare, Breast, Dark meat and so on). A food a chart covers only with a safe minimum is not offered for it.
 
-| Source | Country | Chart |
-| --- | --- | --- |
-| FoodSafety.gov (Safe Minimum Internal Temperatures) | US | [foodsafety.gov](https://www.foodsafety.gov/food-safety-charts/safe-minimum-internal-temperatures) |
-| Health Canada (Safe Cooking Temperatures) | CA | [canada.ca](https://www.canada.ca/en/health-canada/services/general-food-safety-tips/safe-internal-cooking-temperatures.html) |
-| UK Food Standards Agency (Cooking Your Food) | GB | [gov.uk](https://www.gov.uk/government/publications/cooking-your-food/cooking-your-food) |
-| FSANZ (Food Safety Basics) | AU, NZ | [foodstandards.gov.au](https://www.foodstandards.gov.au/consumer/prevention-of-foodborne-illness/food-safety-basics) |
-| ThermoWorks (Chef-Recommended Temps) | any | [thermoworks.com](https://www.thermoworks.com/blogs/thermoblog/chef-recommended-tw-approved) |
-| Mine | any | Your own foods, added with **Add food**. |
+| Source | Chart |
+| --- | --- |
+| ThermoWorks (Chef-Recommended Temperatures) | [thermoworks.com](https://www.thermoworks.com/blogs/thermoblog/chef-recommended-tw-approved) |
+| America's Test Kitchen (How to Know When Food Is Done) | [americastestkitchen.com](https://www.americastestkitchen.com/cooksillustrated/articles/1390-how-to-know-when-food-is-done) |
+| Mine | Your own foods, added with **Add food**. |
+
+### Safe minimums
+
+Sous Chef picks the government chart from your Home Assistant country. A food that chart does not cover takes FoodSafety.gov's safe minimum. Sous Chef never changes a target: when the target is below the food's safe minimum, the Doneness entity says so, and the Sous Chef Card warns.
+
+| Chart | Country |
+| --- | --- |
+| [FoodSafety.gov (Safe Minimum Internal Temperatures)](https://www.foodsafety.gov/food-safety-charts/safe-minimum-internal-temperatures) | US, and any country without its own chart |
+| [Health Canada (Safe Cooking Temperatures)](https://www.canada.ca/en/health-canada/services/general-food-safety-tips/safe-internal-cooking-temperatures.html) | CA |
+| [UK Food Standards Agency (Cooking Your Food)](https://www.gov.uk/government/publications/cooking-your-food/cooking-your-food) | GB |
+| [FSANZ (Food Safety Basics)](https://www.foodstandards.gov.au/consumer/prevention-of-foodborne-illness/food-safety-basics) | AU, NZ |
 
 ### For the Sous Chef Card
 
 - The **Progress** sensor's attributes: `internal` (entity ID, or empty for the lowest of the channels), `channels` (entity IDs, from the tip), `colors` (Home Assistant color names, in order) and `start`.
-- **Source**, **Food type** and **Doneness** carry the chart's link as `url`. Doneness also carries `rest_minutes` or `hold_minutes` when the chart gives one.
+- **Source**, **Food type** and **Doneness** carry the chef chart's link as `url`. Doneness also carries `rest_minutes` or `hold_minutes` when the chart gives one.
+- **Food type** carries the food's government safe minimum: `safe_minimum` (in the probe's unit), `safe_minimum_rest_minutes` or `safe_minimum_hold_minutes` when the chart gives one, and `safety_chart` and `safety_url`, the chart's name and link.
+- **Doneness** carries `below_safe_minimum` (true or false) and `safe_minimum` whenever the food has a safe minimum and there is a target, Custom included.
 - The ambient **Alarm** sensor's `sensor` attribute is the ambient sensor's entity ID.
-- The websocket command `sous_chef/charts` gives every source's whole chart, in the Source select's order: each source's `key`, `url`, `government` and `countries`, and its `foods`, each with its `key`, `icon` and `levels` (`key`, `f`, `c`, and `rest_minutes` or `hold_minutes` when the chart gives one).
+- The websocket command `sous_chef/charts` gives `safety` (the government chart Sous Chef chose: `key`, `name`, `url`) and `sources`, every source's whole chart in the Source select's order: each source's `key`, `url` and `foods`. Each food has its `key`, `icon`, `safe_minimum` (`f`, `c`, `rest_minutes` or `hold_minutes` when the chart gives one, `chart` and `url`; null for a food with none) and `levels` (`key`, `f`, `c`, and `rest_minutes` or `hold_minutes` when the chart gives one).
 
 ## License
 

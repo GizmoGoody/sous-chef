@@ -43,6 +43,7 @@ from .const import (
     CONF_KEEP_LAST,
     CONF_LEVELS,
     CONF_NAME,
+    CONF_SAFETY_FOOD,
     CONF_SENSOR,
     CONF_TEMPERATURE,
     CONF_UNIT,
@@ -289,11 +290,17 @@ class AmbientSubentryFlow(ConfigSubentryFlow):
         )
 
 
+SAFETY_FOOD_SELECTOR = SelectSelector(
+    SelectSelectorConfig(options=FOODS, translation_key="safety_food", mode=SelectSelectorMode.DROPDOWN)
+)
+
+
 def _food_schema() -> vol.Schema:
     return vol.Schema({
         vol.Required(CONF_NAME): TextSelector(),
         vol.Optional(CONF_ICON): IconSelector(),
         vol.Optional(CONF_LEVELS, default=[]): LEVELS_SELECTOR,
+        vol.Optional(CONF_SAFETY_FOOD): SAFETY_FOOD_SELECTOR,
     })
 
 
@@ -316,6 +323,7 @@ def _food_data(user_input: dict[str, Any], unit: str) -> dict[str, Any]:
             for level in user_input.get(CONF_LEVELS, [])
         ],
         CONF_UNIT: unit,
+        CONF_SAFETY_FOOD: user_input.get(CONF_SAFETY_FOOD) or None,
     }
 
 
