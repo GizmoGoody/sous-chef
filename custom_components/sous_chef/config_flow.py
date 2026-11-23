@@ -139,8 +139,8 @@ def _sensors_schema(sensors: list[str], with_auto_on: bool) -> vol.Schema:
         ),
     }
     if with_auto_on:
-        fields[vol.Required(CONF_AUTO_ON, default=False)] = BooleanSelector()
-        fields[vol.Required(CONF_AUTO_OFF, default=False)] = BooleanSelector()
+        fields[vol.Required(CONF_AUTO_ON, default=True)] = BooleanSelector()
+        fields[vol.Required(CONF_AUTO_OFF, default=True)] = BooleanSelector()
     return vol.Schema(fields)
 
 
@@ -175,7 +175,7 @@ class ProbeSubentryFlow(ConfigSubentryFlow):
             elif layout := known_layout(self.hass, device):
                 return self._create(device, colors, layout.internal, layout.channels, auto_on=True, auto_off=True)
             elif len(sensors) == 1:
-                return self._create(device, colors, sensors[0], [], auto_on=False, auto_off=False)
+                return self._create(device, colors, sensors[0], [], auto_on=True, auto_off=True)
             elif not sensors:
                 errors[CONF_DEVICE] = "no_temperature"
             else:
@@ -253,8 +253,8 @@ class ProbeSubentryFlow(ConfigSubentryFlow):
                 return self.async_update_and_abort(self._get_entry(), subentry, data=data)
         schema = vol.Schema({
             vol.Optional(CONF_COLORS, default=[]): COLOR_SELECTOR,
-            vol.Required(CONF_AUTO_ON, default=False): BooleanSelector(),
-            vol.Required(CONF_AUTO_OFF, default=False): BooleanSelector(),
+            vol.Required(CONF_AUTO_ON, default=True): BooleanSelector(),
+            vol.Required(CONF_AUTO_OFF, default=True): BooleanSelector(),
         })
         if choose_sensors:
             schema = schema.extend(_sensors_schema(sensors, with_auto_on=False).schema)

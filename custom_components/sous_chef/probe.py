@@ -24,6 +24,7 @@ reading.
 from __future__ import annotations
 
 from collections import deque
+import logging
 from collections.abc import Callable
 from datetime import datetime, timedelta
 from typing import Any
@@ -53,6 +54,11 @@ from .presets import COOK_STYLES, CUSTOM, OTHER, Catalog, Level, SafeMinimum
 from .profiles import CHARGER_TIMEOUT, freshness
 
 SAMPLE_INTERVAL = timedelta(seconds=60)
+# Fired when Sous Chef turns a probe on or off by itself
+EVENT_AUTO_ON = f"{DOMAIN}_probe_auto_on"
+EVENT_AUTO_OFF = f"{DOMAIN}_probe_auto_off"
+
+_LOGGER = logging.getLogger(__name__)
 
 
 class SettingsStore:
@@ -123,6 +129,7 @@ class Followed:
         fresh = freshness(hass, device_id)
         self._seen_attribute = fresh.attribute if fresh else None
         self._stale_after = fresh.stale_after if fresh else None
+        self._charger_timeout = fresh.charger_timeout if fresh else CHARGER_TIMEOUT
         self._listeners: list[CALLBACK_TYPE] = []
         self._unsubscribes: list[CALLBACK_TYPE] = []
 
@@ -273,8 +280,9 @@ class Probe(Followed):
         self.internal: str | None = data.get(CONF_INTERNAL)
         self.channels: list[str] = list(data.get(CONF_CHANNELS) or [])
         self.colors: list[str] = list(data.get(CONF_COLORS) or [])
-        self.auto_on: bool = bool(data.get(CONF_AUTO_ON))
-        self.auto_off: bool = bool(data.get(CONF_AUTO_OFF))
+        # Both are on unless turned off; a probe added before an option existed has it on
+        self.auto_on: bool = bool(data.get(CONF_AUTO_ON, True))
+        self.auto_off: bool = bool(data.get(CONF_AUTO_OFF, True))
         self.catalog = catalog
         self.keep_last = keep_last
         saved = store.data.get(subentry_id, {})
@@ -316,22 +324,22 @@ class Probe(Followed):
     @callback
     def _state_changed(self, event: Event[EventStateChangedData]) -> None:
         reading = self.reading
-        # A probe that only reports once it is off its charger turns itself on.
-        # A first state (no old state) is a sensor being set up, not a probe
-        # taken off its charger, so it is left alone.
-        turned_on = (
-            self.auto_on
-            and not self.active
-            and event.data["old_state"] is not None
-            and self._last_reading is None
-            and reading is not None
-        )
+        # A probe that starts reporting has come off its charger. A first state
+        # (no old state) is a sensor being set up, not a probe taken off its
+        # charger, so it is left alone.
+        off_charger = event.data["old_state"] is not None and self._last_reading is None and reading is not None
         self._last_reading = reading
         if reading is not None:
             self._last_reported = dt_util.utcnow()
-        if turned_on:
+        if off_charger and not self.active and self.auto_on:
+            self._log_change(True, "it came off its charger")
             self.set_active(True, automatic=True)
             return
+        if off_charger and self.active and not self.auto_started:
+            # Turned on by hand while on its charger, to set up the cook: now
+            # it is off the charger, it turns off when it goes back
+            self.auto_started = True
+            self._save()
         self._update()
         self._changed()
 
@@ -343,8 +351,14 @@ class Probe(Followed):
         now = dt_util.utcnow()
         if self.reading is not None:
             self._last_reported = now
-        elif self.auto_off and self.auto_started and self.active and now - self._last_reported >= CHARGER_TIMEOUT:
-            # It turned itself on off its charger, and has stopped reporting: it is back on its charger
+        elif (
+            self.auto_off
+            and self.auto_started
+            and self.active
+            and now - self._last_reported >= self._charger_timeout
+        ):
+            # It came off its charger during this cook, and has stopped reporting: it is back on its charger
+            self._log_change(False, "it went back on its charger")
             self.set_active(False)
             return
         self._changed()
@@ -506,6 +520,13 @@ class Probe(Followed):
         return self.target < minimum.level.in_unit(self.unit)
 
     # -- Changing the cook ------------------------------------------------
+
+    def _log_change(self, active: bool, reason: str) -> None:
+        """Log a change Sous Chef made on its own, and fire an event, so it can be traced."""
+        _LOGGER.info("Turned %s %s: %s", "on" if active else "off", self.device_id, reason)
+        self.hass.bus.async_fire(
+            EVENT_AUTO_ON if active else EVENT_AUTO_OFF, {"device_id": self.device_id, "reason": reason}
+        )
 
     @callback
     def set_active(self, active: bool, automatic: bool = False) -> None:
