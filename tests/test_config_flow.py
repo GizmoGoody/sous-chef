@@ -69,7 +69,7 @@ async def test_probe_with_one_sensor(hass: HomeAssistant) -> None:
     result = await _add(hass, entry, "probe", {"device": device})
     assert result["type"] is FlowResultType.CREATE_ENTRY
     (subentry,) = entry.subentries.values()
-    assert subentry.data == {"device": device, "internal": sensor, "channels": [], "colors": [], "auto_on": False, "auto_off": False}
+    assert subentry.data == {"device": device, "internal": sensor, "channels": [], "colors": [], "auto_on": True, "auto_off": True}
 
 
 async def test_probe_with_several_sensors(hass: HomeAssistant) -> None:

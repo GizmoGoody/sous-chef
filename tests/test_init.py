@@ -2,6 +2,7 @@
 
 from collections import deque
 from datetime import timedelta
+import logging
 
 from freezegun.api import FrozenDateTimeFactory
 import pytest
@@ -11,7 +12,11 @@ from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 from homeassistant.util.unit_system import METRIC_SYSTEM, US_CUSTOMARY_SYSTEM
-from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_time_changed
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    async_capture_events,
+    async_fire_time_changed,
+)
 
 from custom_components.sous_chef.const import DOMAIN
 
@@ -31,7 +36,7 @@ async def _setup(
     minutes_ago: float = 0,
     country: str | None = "US",
     extra: list[ConfigSubentryData] | None = None,
-    auto_off: bool = True,
+    auto_off: bool | None = True,
     metric: bool = False,
 ) -> tuple[MockConfigEntry, list[str]]:
     hass.config.units = METRIC_SYSTEM if metric else US_CUSTOMARY_SYSTEM
@@ -51,7 +56,8 @@ async def _setup(
                     "channels": channels[1:],
                     "colors": ["red", "blue"],
                     "auto_on": True,
-                    "auto_off": auto_off,
+                    # None: a probe added before the option existed
+                    **({} if auto_off is None else {"auto_off": auto_off}),
                 },
                 subentry_type="probe",
                 title="Probe",
@@ -409,24 +415,45 @@ async def _minutes_pass(hass: HomeAssistant, freezer: FrozenDateTimeFactory, min
         await hass.async_block_till_done()
 
 
-async def test_back_on_the_charger_turns_it_off(hass: HomeAssistant, freezer: FrozenDateTimeFactory) -> None:
-    _, channels = await _setup(hass, "70", minutes_ago=3000)
+async def test_back_on_the_charger_turns_it_off(
+    hass: HomeAssistant, freezer: FrozenDateTimeFactory, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.INFO)
+    _, channels = await _setup(hass, "70", minutes_ago=3000, auto_off=None)
+    events = async_capture_events(hass, "sous_chef_probe_auto_off")
     # Off its charger, it turns itself on
     await _read(hass, channels[0], "71")
     assert hass.states.get(ACTIVE).state == "on"
     # Back on its charger, it sends nothing new. ThermoWorks Cloud keeps its
     # last value, which counts as no reading after 5 minutes.
-    await _minutes_pass(hass, freezer, 6)
-    assert hass.states.get(ACTIVE).state == "on"
-    # No reading for the charger timeout: it turns itself off
     await _minutes_pass(hass, freezer, 5)
+    assert hass.states.get(ACTIVE).state == "on"
+    # No reading for the charger timeout: it turns itself off, and says why
+    await _minutes_pass(hass, freezer, 1)
+    assert hass.states.get(ACTIVE).state == "off"
+    (event,) = events
+    assert event.data["reason"] == "it went back on its charger"
+    assert "Turned off" in caplog.text
+
+
+async def test_turned_on_by_hand_on_the_charger(hass: HomeAssistant, freezer: FrozenDateTimeFactory) -> None:
+    _, channels = await _setup(hass, "70", minutes_ago=3000)
+    # Turned on by hand on its charger, to set up the cook: it stays on there
+    await _switch(hass, True)
+    await _minutes_pass(hass, freezer, 15)
+    assert hass.states.get(ACTIVE).state == "on"
+    # Off the charger, then back on: it turns off
+    await _read(hass, channels[0], "71")
+    await _minutes_pass(hass, freezer, 6)
     assert hass.states.get(ACTIVE).state == "off"
 
 
-async def test_turned_on_by_hand_stays_on(hass: HomeAssistant, freezer: FrozenDateTimeFactory) -> None:
-    _, channels = await _setup(hass, "70", minutes_ago=3000)
+async def test_turned_on_by_hand_while_reporting_stays_on(
+    hass: HomeAssistant, freezer: FrozenDateTimeFactory
+) -> None:
+    await _setup(hass, "70")
     await _switch(hass, True)
-    await _read(hass, channels[0], "71")
+    # A lost signal does not end a cook turned on by hand while the probe was reporting
     await _minutes_pass(hass, freezer, 15)
     assert hass.states.get(ACTIVE).state == "on"
 
@@ -437,6 +464,17 @@ async def test_charger_option_off_stays_on(hass: HomeAssistant, freezer: FrozenD
     assert hass.states.get(ACTIVE).state == "on"
     await _minutes_pass(hass, freezer, 15)
     assert hass.states.get(ACTIVE).state == "on"
+
+
+async def test_off_the_charger_survives_restart(hass: HomeAssistant, freezer: FrozenDateTimeFactory) -> None:
+    entry, channels = await _setup(hass, "70", minutes_ago=3000)
+    await _read(hass, channels[0], "71")
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+    # After a restart it still knows it came off its charger, and turns off when it goes back
+    assert hass.states.get(ACTIVE).state == "on"
+    await _minutes_pass(hass, freezer, 7)
+    assert hass.states.get(ACTIVE).state == "off"
 
 
 async def test_signal_drop_keeps_the_cook(hass: HomeAssistant) -> None:

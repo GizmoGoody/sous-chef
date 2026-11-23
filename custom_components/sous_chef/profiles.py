@@ -6,9 +6,10 @@ needs no questions: a ThermoWorks RFX MEAT reports its internal temperature
 as channel 0 (the lowest of its four sensors) and its sensors as channels 1
 to 4, with channel 1 at the tip.
 
-A probe that turned itself on when it came off its charger can turn itself
-off when it goes back: it counts as back on its charger once it has had no
-reading for the charger timeout.
+A probe on its charger sends nothing, so a probe that stops reporting counts
+as back on its charger once it has had no reading for the charger timeout.
+An RFX probe's battery state is no help: ThermoWorks Cloud keeps the one it
+sent last, "discharging", while the probe sits on its charger.
 
 A known device can also say how to tell that it is reporting. ThermoWorks
 Cloud keeps showing a sensor's last value after it stops reporting (an RFX
@@ -29,8 +30,10 @@ from homeassistant.helpers import device_registry as dr, entity_registry as er
 THERMOWORKS = "thermoworks_cloud"
 # A ThermoWorks sensor that has sent nothing for this long is on its charger, or out of range
 THERMOWORKS_STALE_AFTER = timedelta(minutes=5)
-# A probe that turned itself on, and has had no reading for this long, is back on its charger
+# A probe that has had no reading for this long is back on its charger
 CHARGER_TIMEOUT = timedelta(minutes=5)
+# A ThermoWorks reading already counts as none once it is THERMOWORKS_STALE_AFTER old
+THERMOWORKS_CHARGER_TIMEOUT = timedelta(minutes=1)
 # A ThermoWorks channel's temperature has the unique ID thermoworks_cloud-<serial>-<channel>.
 # Its alarm thresholds are temperature sensors too, but add a suffix after the channel.
 THERMOWORKS_CHANNEL = re.compile(r".+-(\d+)")
@@ -50,6 +53,8 @@ class Freshness:
 
     attribute: str
     stale_after: timedelta
+    # How long with no reading means the probe is back on its charger
+    charger_timeout: timedelta = CHARGER_TIMEOUT
 
 
 def _reads_temperature(entry: er.RegistryEntry) -> bool:
@@ -88,7 +93,7 @@ def freshness(hass: HomeAssistant, device_id: str) -> Freshness | None:
     """
     known = _manufacturer_model(hass, device_id)
     if known and known[0] == "thermoworks":
-        return Freshness("last_seen", THERMOWORKS_STALE_AFTER)
+        return Freshness("last_seen", THERMOWORKS_STALE_AFTER, THERMOWORKS_CHARGER_TIMEOUT)
     return None
 
 

@@ -35,29 +35,29 @@
           "data": {
             "internal": "Internal temperature",
             "channels": "Channels from the tip",
-            "auto_on": "Turn on when it starts reporting",
+            "auto_on": "Turn on when taken off the charger",
             "auto_off": "Turn off when put back on the charger"
           },
           "data_description": {
             "internal": "The one sensor that stands for the inside of the food. Leave it empty to use the lowest of the channels.",
             "channels": "The probe's sensors, in order from the tip. The Sous Chef Card lists them in this order, and Max is the highest of them.",
-            "auto_on": "Turn the probe on by itself when it starts reporting, such as when it comes off its charger. Leave this off for a probe that reports all the time.",
-            "auto_off": "A probe that turned itself on turns itself off once it has sent nothing for 5 minutes, such as when it goes back on its charger. A probe you turned on yourself stays on."
+            "auto_on": "Turn the probe on by itself when it starts reporting, such as when it comes off its charger.",
+            "auto_off": "Turn the probe off by itself when it stops reporting, such as when it goes back on its charger. A probe you turned on by hand while it was reporting stays on; one you turned on while it was on its charger turns off when it goes back."
           }
         },
         "reconfigure": {
           "title": "Change the probe",
           "data": {
             "colors": "Probe colors",
-            "auto_on": "Turn on when it starts reporting",
+            "auto_on": "Turn on when taken off the charger",
             "auto_off": "Turn off when put back on the charger",
             "internal": "Internal temperature",
             "channels": "Channels from the tip"
           },
           "data_description": {
             "colors": "The colored bands on the probe, in order. Choose several for a striped probe. The Sous Chef Card shows the probe in these colors.",
-            "auto_on": "Turn the probe on by itself when it starts reporting, such as when it comes off its charger. Leave this off for a probe that reports all the time.",
-            "auto_off": "A probe that turned itself on turns itself off once it has sent nothing for 5 minutes, such as when it goes back on its charger. A probe you turned on yourself stays on.",
+            "auto_on": "Turn the probe on by itself when it starts reporting, such as when it comes off its charger.",
+            "auto_off": "Turn the probe off by itself when it stops reporting, such as when it goes back on its charger. A probe you turned on by hand while it was reporting stays on; one you turned on while it was on its charger turns off when it goes back.",
             "internal": "The one sensor that stands for the inside of the food. Leave it empty to use the lowest of the channels.",
             "channels": "The probe's sensors, in order from the tip. The Sous Chef Card lists them in this order, and Max is the highest of them."
           }
