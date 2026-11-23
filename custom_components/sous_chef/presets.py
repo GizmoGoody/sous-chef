@@ -283,3 +283,46 @@ class Catalog:
             if key in chart.foods:
                 return SafeMinimum(chart, chart.foods[key])
         return None
+
+
+@dataclass(frozen=True)
+class CookStyle:
+    """A grill preset: its target and the band the alarm limits sit at either side of it, in °F and in °C.
+
+    The °C values are the °F ones converted and rounded to whole degrees.
+    """
+
+    target_f: int
+    band_f: int
+    target_c: int
+    band_c: int
+
+    def target(self, unit: str) -> float:
+        if unit == UnitOfTemperature.FAHRENHEIT:
+            return self.target_f
+        if unit == UnitOfTemperature.CELSIUS:
+            return self.target_c
+        return round(TemperatureConverter.convert(self.target_c, UnitOfTemperature.CELSIUS, unit), 1)
+
+    def band(self, unit: str) -> float:
+        if unit == UnitOfTemperature.FAHRENHEIT:
+            return self.band_f
+        if unit == UnitOfTemperature.CELSIUS:
+            return self.band_c
+        # A difference of degrees: Kelvin steps are Celsius steps
+        return self.band_c
+
+    def as_dict(self, unit: str) -> dict[str, float]:
+        target, band = self.target(unit), self.band(unit)
+        return {"target": target, "low": target - band, "high": target + band}
+
+
+# The ambient sensor's cook styles, in the order the Cook style select lists them, then Custom
+COOK_STYLES = {
+    "smoke": CookStyle(225, 15, 107, 8),
+    "low_and_slow": CookStyle(250, 25, 121, 14),
+    "roast": CookStyle(325, 25, 163, 14),
+    "hot_and_fast": CookStyle(375, 25, 191, 14),
+    "bake": CookStyle(400, 25, 204, 14),
+    "sear": CookStyle(550, 50, 288, 28),
+}

@@ -1,7 +1,8 @@
 """A probe's source, food type and doneness.
 
 Each carries the source's chart link as its url attribute, so the Sous Chef
-Card can show where a target comes from. Food type also carries the food's
+Card can show where a target comes from. An ambient sensor's cook style sets
+its target and alarm limits. Food type also carries the food's
 government safe minimum and its chart; Doneness says whether the target is
 below it.
 """
@@ -16,8 +17,8 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import SousChefConfigEntry
-from .entity import ProbeEntity
-from .presets import MINE
+from .entity import AmbientEntity, ProbeEntity
+from .presets import COOK_STYLES, CUSTOM, MINE
 
 
 async def async_setup_entry(
@@ -31,6 +32,11 @@ async def async_setup_entry(
                 FoodTypeSelect(hass, subentry, probe, "food_type"),
                 DonenessSelect(hass, subentry, probe, "doneness"),
             ],
+            config_subentry_id=subentry_id,
+        )
+    for subentry_id, ambient in entry.runtime_data.ambients.items():
+        async_add_entities(
+            [CookStyleSelect(hass, entry.subentries[subentry_id], ambient, "cook_style")],
             config_subentry_id=subentry_id,
         )
 
@@ -123,3 +129,26 @@ class DonenessSelect(PresetSelect):
 
     async def async_select_option(self, option: str) -> None:
         self.probe.set_doneness(option)
+
+
+class CookStyleSelect(AmbientEntity, SelectEntity):
+    """How the grill cooks: a preset sets its target and alarm limits, or Custom for any other.
+
+    Its presets attribute gives each preset's target, low and high in the
+    sensor's unit, so a card can show the numbers in its menu.
+    """
+
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_options = [*COOK_STYLES, CUSTOM]
+    _unrecorded_attributes = frozenset({"presets"})
+
+    @property
+    def current_option(self) -> str:
+        return self.ambient.cook_style
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {"presets": {key: style.as_dict(self.ambient.unit) for key, style in COOK_STYLES.items()}}
+
+    async def async_select_option(self, option: str) -> None:
+        self.ambient.set_cook_style(option)

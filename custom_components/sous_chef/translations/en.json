@@ -80,7 +80,7 @@
       "step": {
         "user": {
           "title": "Add an ambient sensor",
-          "description": "The air in a grill, pit or oven. It gets alarms, no food and no target. Only devices with a temperature sensor are listed.",
+          "description": "The air in a grill, pit or oven. It gets a target, a cook style and alarms, and no food. Only devices with a temperature sensor are listed.",
           "data": {
             "device": "Device"
           },
@@ -230,6 +230,18 @@
           "dark_meat": "Dark meat",
           "custom": "Custom"
         }
+      },
+      "cook_style": {
+        "name": "Cook style",
+        "state": {
+          "smoke": "Smoke",
+          "low_and_slow": "Low and slow",
+          "roast": "Roast",
+          "hot_and_fast": "Hot and fast",
+          "bake": "Bake",
+          "sear": "Sear",
+          "custom": "Custom"
+        }
       }
     },
     "sensor": {
@@ -326,6 +338,11 @@
           "keep_last": "When a probe is turned on for a new cook, keep the source, food type, doneness and target it had last time. Turn this off to start each cook blank."
         }
       }
+    }
+  },
+  "exceptions": {
+    "grill_target_too_low": {
+      "message": "A grill target is 0 (no target) or at least {lowest}."
     }
   }
 }

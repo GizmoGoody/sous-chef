@@ -35,6 +35,18 @@
       },
       "doneness": {
         "default": "mdi:thermometer-check"
+      },
+      "cook_style": {
+        "default": "mdi:grill",
+        "state": {
+          "smoke": "mdi:smoke",
+          "low_and_slow": "mdi:timer-sand",
+          "roast": "mdi:stove",
+          "hot_and_fast": "mdi:fire",
+          "bake": "mdi:bread-slice",
+          "sear": "mdi:fire-alert",
+          "custom": "mdi:tune"
+        }
       }
     },
     "number": {

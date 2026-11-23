@@ -23,7 +23,7 @@ The [Sous Chef Card](https://github.com/GizmoGoody/sous-chef-card) shows it on a
    - A **ThermoWorks RFX MEAT** needs nothing else: its internal temperature is channel 0, and its channels 1 to 4 run from the tip.
    - A device with **one** temperature sensor needs nothing else.
    - A device with **several** temperature sensors asks for its internal temperature (one sensor, or empty for the lowest of the channels) and its channels in order from the tip.
-3. Choose **Add ambient sensor** for each sensor that reads the air in a grill, pit or oven. It gets alarms, no food and no target.
+3. Choose **Add ambient sensor** for each sensor that reads the air in a grill, pit or oven. It gets a target, a cook style and alarms, and no food.
 4. Choose **Add food** for a food no chef chart lists, with your own doneness levels. It is listed under the source **Mine**. Optionally, choose **Safe minimum as**: the built-in food whose government safe minimum applies to it.
 5. **Configure** sets whether a new cook keeps the last source, food type, doneness and target (on by default).
 
@@ -58,7 +58,23 @@ On each probe's own device, beside its temperature sensors. Settings are Configu
 | Alarm | Sensor | On while the internal temperature is above Alarm high or below Alarm low. |
 | Max | Sensor | The highest of the probe's channels. Only for probes with channels. |
 
-On each ambient sensor's device: **Alarm high** and **Alarm low** (Configuration, 0 is no limit) and **Alarm** (on while the temperature is out of range).
+On each ambient sensor's device:
+
+| Entity | Kind | What it is |
+| --- | --- | --- |
+| Target | Configuration | The grill's target temperature, 100 to 700 °F (40 to 370 °C). 0 is no target. Its history is recorded, so a dashboard can graph it beside the ambient reading. |
+| Cook style | Configuration | A preset that sets Target, Alarm low and Alarm high, or Custom. Setting any of those three by hand makes it Custom; choosing Custom changes nothing else. |
+| Alarm high, Alarm low | Configuration | The ambient temperature must stay below and above these. 0 is no limit. |
+| Alarm | Sensor | On while the temperature is out of range. |
+
+| Cook style | Target | Alarm low and high |
+| --- | --- | --- |
+| Smoke | 225 °F (107 °C) | ±15 °F (±8 °C) |
+| Low and slow | 250 °F (121 °C) | ±25 °F (±14 °C) |
+| Roast | 325 °F (163 °C) | ±25 °F (±14 °C) |
+| Hot and fast | 375 °F (191 °C) | ±25 °F (±14 °C) |
+| Bake | 400 °F (204 °C) | ±25 °F (±14 °C) |
+| Sear | 550 °F (288 °C) | ±50 °F (±28 °C) |
 
 An Alarm low turns on only once the temperature has first reached it, so lighting a grill or putting a probe in cold food raises no alarm.
 
@@ -91,6 +107,7 @@ Sous Chef picks the government chart from your Home Assistant country. A food th
 - **Food type** carries the food's government safe minimum: `safe_minimum` (in the probe's unit), `safe_minimum_rest_minutes` or `safe_minimum_hold_minutes` when the chart gives one, and `safety_chart` and `safety_url`, the chart's name and link.
 - **Doneness** carries `below_safe_minimum` (true or false) and `safe_minimum` whenever the food has a safe minimum and there is a target, Custom included.
 - The ambient **Alarm** sensor's `sensor` attribute is the ambient sensor's entity ID.
+- The ambient **Cook style** select's `presets` attribute maps each preset (not Custom) to its `target`, `low` and `high` in the sensor's unit.
 - The websocket command `sous_chef/charts` gives `safety` (the government chart Sous Chef chose: `key`, `name`, `url`) and `sources`, every source's whole chart in the Source select's order: each source's `key`, `url` and `foods`. Each food has its `key`, `icon`, `safe_minimum` (`f`, `c`, `rest_minutes` or `hold_minutes` when the chart gives one, `chart` and `url`; null for a food with none) and `levels` (`key`, `f`, `c`, and `rest_minutes` or `hold_minutes` when the chart gives one).
 
 ## License
