@@ -10,8 +10,8 @@ A probe can turn itself on when it starts reporting (off its charger) and, if
 it did, off again when it stops (back on its charger). A probe the user turned
 on stays on until the user turns it off.
 
-An ambient sensor reads the air in a grill, pit or oven. It has no cook, only
-an alarm.
+An ambient sensor reads the air in a grill, pit or oven. It has no cook: a
+target, a cook style and an alarm.
 
 Every setting (the cook, the limits) is kept in Home Assistant's storage, so
 every browser shows the same values and they last across restarts. A reading
@@ -49,7 +49,7 @@ from .const import (
     RATE_MIN_SPAN_S,
     STALL_RATE_F,
 )
-from .presets import CUSTOM, OTHER, Catalog, Level, SafeMinimum
+from .presets import COOK_STYLES, CUSTOM, OTHER, Catalog, Level, SafeMinimum
 from .profiles import CHARGER_TIMEOUT, freshness
 
 SAMPLE_INTERVAL = timedelta(seconds=60)
@@ -173,12 +173,22 @@ class Followed:
 
 
 class Ambient(Followed):
-    """An ambient sensor: the air in a grill, pit or oven, and its alarm."""
+    """An ambient sensor: the air in a grill, pit or oven, its target and cook style, and its alarm.
+
+    Choosing a cook style sets the target and both alarm limits. Setting any
+    of them by hand makes the cook style Custom; choosing Custom changes
+    nothing else.
+    """
 
     def __init__(self, hass: HomeAssistant, store: SettingsStore, subentry_id: str, data: dict[str, Any]) -> None:
         super().__init__(hass, store, subentry_id, data[CONF_DEVICE])
         self.sensor: str = data[CONF_SENSOR]
-        self.limits = Limits(store.data.get(subentry_id, {}))
+        saved = store.data.get(subentry_id, {})
+        self.limits = Limits(saved)
+        self.target: float | None = saved.get("target")
+        self.cook_style: str = saved.get("cook_style", CUSTOM)
+        if self.cook_style not in COOK_STYLES:
+            self.cook_style = CUSTOM
 
     @property
     def followed(self) -> list[str]:
@@ -210,17 +220,40 @@ class Ambient(Followed):
 
     @callback
     def set_limit(self, high: bool, value: float | None) -> None:
+        self._set_limit(high, value)
+        self.cook_style = CUSTOM
+        self._save()
+        self._changed()
+
+    def _set_limit(self, high: bool, value: float | None) -> None:
         if high:
             self.limits.high = value
         else:
             self.limits.low = value
             self.limits.armed = False
             self.limits.arm(self.reading)
+
+    @callback
+    def set_target(self, value: float | None) -> None:
+        self.target = value
+        self.cook_style = CUSTOM
+        self._save()
+        self._changed()
+
+    @callback
+    def set_cook_style(self, style: str) -> None:
+        """A cook style sets the target and the alarm limits either side of it; Custom changes nothing else."""
+        self.cook_style = style
+        if preset := COOK_STYLES.get(style):
+            numbers = preset.as_dict(self.unit)
+            self.target = numbers["target"]
+            self._set_limit(True, numbers["high"])
+            self._set_limit(False, numbers["low"])
         self._save()
         self._changed()
 
     def _save(self) -> None:
-        self.store.save(self.id, self.limits.as_dict())
+        self.store.save(self.id, {**self.limits.as_dict(), "target": self.target, "cook_style": self.cook_style})
 
 
 class Probe(Followed):

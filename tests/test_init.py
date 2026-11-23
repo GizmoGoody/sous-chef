@@ -4,8 +4,11 @@ from collections import deque
 from datetime import timedelta
 
 from freezegun.api import FrozenDateTimeFactory
+import pytest
 from homeassistant.config_entries import ConfigSubentryData
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ServiceValidationError
+from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 from homeassistant.util.unit_system import METRIC_SYSTEM, US_CUSTOMARY_SYSTEM
 from pytest_homeassistant_custom_component.common import MockConfigEntry, async_fire_time_changed
@@ -29,8 +32,9 @@ async def _setup(
     country: str | None = "US",
     extra: list[ConfigSubentryData] | None = None,
     auto_off: bool = True,
+    metric: bool = False,
 ) -> tuple[MockConfigEntry, list[str]]:
-    hass.config.units = US_CUSTOMARY_SYSTEM
+    hass.config.units = METRIC_SYSTEM if metric else US_CUSTOMARY_SYSTEM
     hass.config.country = country
     device, channels = rfx_meat(hass)
     hass.states.async_set(channels[0], reading, rfx_state(minutes_ago))
@@ -484,3 +488,79 @@ async def test_cook_survives_reload(hass: HomeAssistant) -> None:
     assert hass.states.get(FOOD).state == "tuna"
     assert hass.states.get(DONENESS).state == "done"
     assert _value(hass, "number.probe_alarm_high") == 150
+
+
+GRILL_TARGET = "number.gateway_target"
+COOK_STYLE = "select.gateway_cook_style"
+GRILL_LOW = "number.gateway_alarm_low"
+GRILL_HIGH = "number.gateway_alarm_high"
+
+
+async def _grill(hass: HomeAssistant, unit: str = "°F") -> tuple[MockConfigEntry, str]:
+    device, (sensor,) = other_probe(hass, "Gateway", 1)
+    hass.states.async_set(sensor, "70", {"unit_of_measurement": unit, "device_class": "temperature"})
+    ambient = ConfigSubentryData(
+        data={"device": device, "sensor": sensor}, subentry_type="ambient", title="Grill Ambient", unique_id=None
+    )
+    entry, _ = await _setup(hass, extra=[ambient], metric=unit == "°C")
+    return entry, device
+
+
+async def test_grill_cook_style_sets_target_and_alarms(hass: HomeAssistant) -> None:
+    await _grill(hass)
+    assert hass.states.get(COOK_STYLE).state == "custom"
+    assert hass.states.get(GRILL_TARGET).state == "unknown"
+    await _select(hass, COOK_STYLE, "low_and_slow")
+    assert _value(hass, GRILL_TARGET) == 250
+    assert _value(hass, GRILL_LOW) == 225
+    assert _value(hass, GRILL_HIGH) == 275
+    await _select(hass, COOK_STYLE, "sear")
+    assert (_value(hass, GRILL_TARGET), _value(hass, GRILL_LOW), _value(hass, GRILL_HIGH)) == (550, 500, 600)
+    presets = hass.states.get(COOK_STYLE).attributes["presets"]
+    assert presets["smoke"] == {"target": 225, "low": 210, "high": 240}
+    assert "custom" not in presets
+    # Custom changes nothing else
+    await _select(hass, COOK_STYLE, "custom")
+    assert _value(hass, GRILL_TARGET) == 550
+    assert _value(hass, GRILL_LOW) == 500
+
+
+async def test_grill_manual_change_is_custom(hass: HomeAssistant) -> None:
+    await _grill(hass)
+    for entity_id, value in ((GRILL_TARGET, 260), (GRILL_LOW, 200), (GRILL_HIGH, 300)):
+        await _select(hass, COOK_STYLE, "smoke")
+        await _set(hass, entity_id, value)
+        assert hass.states.get(COOK_STYLE).state == "custom"
+        assert _value(hass, entity_id) == value
+    # 0 is no target; anything else must be in range
+    await _set(hass, GRILL_TARGET, 0)
+    assert hass.states.get(GRILL_TARGET).state == "unknown"
+    with pytest.raises(ServiceValidationError):
+        await _set(hass, GRILL_TARGET, 50)
+
+
+async def test_grill_presets_in_celsius(hass: HomeAssistant) -> None:
+    await _grill(hass, "°C")
+    target = hass.states.get(GRILL_TARGET).attributes
+    assert (target["min"], target["max"], target["step"]) == (0, 370, 1)
+    await _select(hass, COOK_STYLE, "smoke")
+    assert (_value(hass, GRILL_TARGET), _value(hass, GRILL_LOW), _value(hass, GRILL_HIGH)) == (107, 99, 115)
+    assert hass.states.get(COOK_STYLE).attributes["presets"]["sear"] == {"target": 288, "low": 260, "high": 316}
+
+
+async def test_grill_survives_restart(hass: HomeAssistant) -> None:
+    entry, _ = await _grill(hass)
+    assert hass.states.get(GRILL_TARGET).attributes["step"] == 5
+    await _select(hass, COOK_STYLE, "roast")
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert hass.states.get(COOK_STYLE).state == "roast"
+    assert _value(hass, GRILL_TARGET) == 325
+    assert _value(hass, GRILL_LOW) == 300
+
+
+async def test_grill_entities_on_the_ambient_device(hass: HomeAssistant) -> None:
+    _, device = await _grill(hass)
+    registry = er.async_get(hass)
+    for entity_id in (GRILL_TARGET, COOK_STYLE, GRILL_LOW, GRILL_HIGH, "binary_sensor.gateway_alarm"):
+        assert registry.async_get(entity_id).device_id == device

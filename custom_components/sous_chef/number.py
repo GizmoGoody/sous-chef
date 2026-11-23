@@ -1,6 +1,7 @@
-"""A probe's target, Pull early by and alarm limits, and an ambient sensor's alarm limits.
+"""A probe's target, Pull early by and alarm limits, and an ambient sensor's target and alarm limits.
 
-An alarm limit of 0 is no limit, and shows as unknown.
+An alarm limit of 0 is no limit, and an ambient target of 0 is no target;
+both show as unknown.
 """
 
 from __future__ import annotations
@@ -8,15 +9,21 @@ from __future__ import annotations
 from homeassistant.components.number import NumberDeviceClass, NumberEntity, NumberMode
 from homeassistant.const import EntityCategory, UnitOfTemperature
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from . import SousChefConfigEntry
+from .const import DOMAIN
 from .entity import AmbientEntity, ProbeEntity
 
 # The largest value of each kind of number, in °F and in °C
 PROBE_MAX = {UnitOfTemperature.FAHRENHEIT: 250, UnitOfTemperature.CELSIUS: 120}
 AMBIENT_MAX = {UnitOfTemperature.FAHRENHEIT: 1000, UnitOfTemperature.CELSIUS: 540}
 PULL_EARLY_MAX = {UnitOfTemperature.FAHRENHEIT: 30, UnitOfTemperature.CELSIUS: 15}
+# A grill's target: its range and step, in °F and in °C
+GRILL_MIN = {UnitOfTemperature.FAHRENHEIT: 100, UnitOfTemperature.CELSIUS: 40}
+GRILL_MAX = {UnitOfTemperature.FAHRENHEIT: 700, UnitOfTemperature.CELSIUS: 370}
+GRILL_STEP = {UnitOfTemperature.FAHRENHEIT: 5, UnitOfTemperature.CELSIUS: 1}
 
 
 async def async_setup_entry(
@@ -37,6 +44,7 @@ async def async_setup_entry(
         subentry = entry.subentries[subentry_id]
         async_add_entities(
             [
+                GrillTargetNumber(hass, subentry, ambient, "target"),
                 AmbientLimitNumber(hass, subentry, ambient, "alarm_high"),
                 AmbientLimitNumber(hass, subentry, ambient, "alarm_low"),
             ],
@@ -157,3 +165,37 @@ class AmbientLimitNumber(AmbientEntity, LimitNumber):
 
     async def async_set_native_value(self, value: float) -> None:
         self.ambient.set_limit(self._high, value or None)
+
+
+class GrillTargetNumber(AmbientEntity, TemperatureNumber):
+    """The temperature the grill, pit or oven is held at. 0 is no target.
+
+    Choosing a cook style sets it; setting it by hand makes the cook style
+    Custom. Its state is recorded, so a dashboard can graph it beside the
+    ambient reading.
+    """
+
+    _attr_native_min_value = 0
+    _maximum = GRILL_MAX
+
+    @property
+    def unit(self) -> str:
+        return self.ambient.unit
+
+    @property
+    def native_step(self) -> float:
+        return GRILL_STEP.get(self.unit, GRILL_STEP[UnitOfTemperature.CELSIUS])
+
+    @property
+    def native_value(self) -> float | None:
+        return self.ambient.target
+
+    async def async_set_native_value(self, value: float) -> None:
+        lowest = GRILL_MIN.get(self.unit, GRILL_MIN[UnitOfTemperature.CELSIUS])
+        if 0 < value < lowest:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="grill_target_too_low",
+                translation_placeholders={"lowest": f"{lowest} {self.unit}"},
+            )
+        self.ambient.set_target(value or None)
